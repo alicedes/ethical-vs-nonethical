@@ -1,0 +1,234 @@
+---
+title: "A2.2 - Ethical Visualizations - Team 9"
+author:
+- Alice Destrait
+- Laura Garcia
+- Eduardo Soto
+- Khauhelo Mile
+- Karel Kasongo
+- Harshvardhan Soni
+date: "2024-02-21"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(plotly)
+library(sf)
+library(tigris)
+```
+
+```{r Overview df, message=FALSE, warning=FALSE, echo=FALSE}
+pain_killer <- read_csv("data/arcos-nm-statewide-itemized.csv")
+df <- as.data.frame(pain_killer)
+colSums(is.na(df))
+names(df) <- tolower(names(df))
+df <- df[, !(names(df) %in% c("transaction_code", "measure", "buyer_state"))]
+```
+
+## Blue Team
+HERE GOES THE 300 WORD CRITICAL ANALYSIS OF THE VISUALIZATIONS. THESE ARE THE ETHICAL ONES. 
+THE ANALYSIS SHOULD NOT GIVE AWAY THAT THEY ARE THE ETHICAL ONES, BUT SHOULD MATCH WITH THE STORY OF THE PLOTS. 
+
+```{r graph 1, message=FALSE, warning=FALSE, tidy=TRUE}
+df$transaction_date <- as.Date(df$transaction_date)
+
+df$year <- format(df$transaction_date, "%Y")
+df$month <- format(df$transaction_date, "%m")
+
+# Aggregate the data by year and month
+transaction_counts <- aggregate(df$transaction_date, 
+                                by = list(year = df$year, month = df$month), 
+                                FUN = length)
+colnames(transaction_counts) <- c("year", "month", "Transaction_Count")
+
+# Convert year and month to a Date object
+transaction_counts$transaction_date <- as.Date(paste(transaction_counts$year, 
+                                                      transaction_counts$month, 
+                                                      "01", 
+                                                      sep = "-"))
+# Define a custom function to format the date labels
+custom_date_labels <- function(x) {
+  ifelse(format(x, "%m") == "01", format(x, "%Y"), "")
+}
+
+# Create the plot with custom date labels and breaks by 3 months
+ggplot(transaction_counts, aes(x = transaction_date, y = Transaction_Count)) +
+  geom_line(color = "#6c04a4") +
+  scale_x_date(date_breaks = "3 months", labels = custom_date_labels, minor_breaks = NULL) +
+  labs(title = "Monthly Transaction Trends", title.font = element_text(family = "Arial"), 
+       subtitle = "Opioid Medication Transactions From 2006 to 2020",
+       subtitle.font = element_text(family = "Arial"),
+       caption = "For New Mexico data",
+       x = "Year",
+       y = "Transactions") +
+  theme_minimal() +
+  theme(
+      plot.title = element_text(
+        face = "bold", 
+        color = "black", 
+        size = 16),
+      plot.subtitle = element_text( 
+        color = "darkgray", 
+        size = 14, 
+        hjust = 0, vjust = 1), 
+      plot.caption = element_text(face = "bold", color = "darkgray", size = 12,  hjust = 0)
+      )
+```
+```{r second plot, message=FALSE, warning=FALSE, tidy=TRUE}
+buyer_name_total_count <- df %>%
+  group_by(buyer_name) %>%
+  summarise(total_count = sum(n())) %>%
+  arrange(desc(total_count)) %>%
+  slice_head(n = 5)  # Select top 5 buyer_names with the highest total count
+
+pill_data <- mutate(df, 
+                    Era = case_when(
+                      year >= 2006 & year <= 2009 ~ "Rise (2006-2009)",
+                      year >= 2010 & year <= 2014 ~ "Peak (2010-2014)",
+                      year >= 2015 & year <= 2019 ~ "Fall (2015-2019)"
+                    ))
+
+# Count occurrences of each distributor in each era
+era_distribution <- pill_data %>%
+  group_by(Era, buyer_name) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  group_by(Era) %>%
+  top_n(5, Count)
+
+era_distribution_summarized <- era_distribution %>%
+  group_by(Era, buyer_name) %>%
+  summarise(Count = sum(Count))
+# Filter era_distribution_summarized to include only the top 5 buyer_names
+era_distribution_top5 <- era_distribution_summarized %>%
+  filter(buyer_name %in% buyer_name_total_count$buyer_name)
+
+# ... (your previous code)
+
+# Create horizontal stacked bar chart with a gradient from purple to pink
+ggplot(era_distribution_top5, aes(x = Count/100000, y = reorder(buyer_name, Count), fill = Era)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Pill Distributors Across Three Eras",
+       subtitle = "Selected based on highest overall distribution counts",
+       caption = "For New Mexico data",
+       x = "Count in 100,000",
+       y = "Distributors") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", color = "black", size = 16, hjust = 0),
+    plot.subtitle = element_text(color = "darkgray", size = 14, hjust = 0),
+    axis.text.y = element_text(angle = 0, hjust = 0),
+    plot.caption = element_text(face = "bold", color = "darkgray", size = 12,  hjust = 0)
+  ) +
+  scale_fill_viridis_d(name = "Distribution Era", option = "plasma", begin = 0.8, end = 0.2)  # Change legend title
+```
+
+```{r third plot, message=FALSE, warning=FALSE, tidy=TRUE}
+filtered_data <- df %>%
+  filter(buyer_name %in% era_distribution_top5$buyer_name) %>%
+  group_by(buyer_name) %>%
+  summarise(average_dosage_unit = mean(dosage_unit, na.rm = TRUE)) %>%
+  arrange(desc(average_dosage_unit))  # Arrange in descending order of average dosage unit
+
+ggplot(filtered_data, aes(x = average_dosage_unit, y = reorder(buyer_name, average_dosage_unit) )) +
+  geom_bar(stat = "identity", fill = "#6c04a4") +
+  labs(title = "Average Dosage Unit for Selected Distributors",
+       subtitle = "Comparison among top distributors with highest distribution",
+       x = "Average Dosage Unit",
+       y = "Distributor",
+       caption = "For New Mexico data") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", family = "Arial", color = "black", size = 16, hjust = 0),
+    plot.subtitle = element_text(color = "darkgray", size = 11, hjust = 0),
+    axis.text.y = element_text(hjust = 0),  # Align y-axis labels with the left edge
+    plot.caption = element_text(face = "bold", color = "darkgray", size = 12,  hjust = 0)
+  )
+
+```
+
+
+## RED TEAM
+HERE GOES THE 300 WORD CRITICAL ANALYSIS OF THE UNETHICAL PLOTS. WRITE IT AS IF THEY WERE THE REAL THING, NOT UNETHICAL. 
+
+```{r Misleading 1st graph}
+recent_years <- subset(transaction_counts, as.numeric(year) >= 2006 & as.numeric(year) <= 2011)
+
+# Create the plot with custom date labels and breaks by 3 months
+ggplot(recent_years, aes(x = transaction_date, y = Transaction_Count)) +
+  geom_line(color = "#6c04a4") +
+  scale_x_date(date_breaks = "1 year", labels = scales::date_format("%Y")) +  # Adjust date breaks and format
+  labs(title = "Monthly Transaction Trends", title.font = element_text(family = "Arial"), 
+       subtitle = "Opioid Medication Transactions For The Last Six Years",
+       subtitle.font = element_text(family = "Arial"),
+       caption = "For New Mexico data",
+       x = "Year",
+       y = "Transactions") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(
+      face = "bold", 
+      color = "black", 
+      size = 16),
+    plot.subtitle = element_text( 
+      color = "darkgray", 
+      size = 14, 
+      hjust = 0, vjust = 1),
+    axis.text.x = element_text(color = "darkgray"),  # Adjust x-axis label color
+    axis.title.x = element_blank(), 
+    plot.caption = element_text(face = "bold", color = "darkgray", size = 12,  hjust = 0)
+  )
+
+```
+
+```{r}
+ggplot(era_distribution_top5, aes(x = Count/100000, y = reorder(buyer_name, Count), fill = Era)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Pill Distributors Across Three Eras",
+       subtitle = "Selected based on highest overall distribution counts",
+       caption = "For New Mexico data",
+       x = "Count in 100,000 (log scale)",
+       y = "Distributors") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", color = "black", size = 16, hjust = 0),
+    plot.subtitle = element_text(color = "darkgray", size = 14, hjust = 0),
+    axis.text.y = element_text(angle = 0, hjust = 0), 
+    plot.caption = element_text(face = "bold", color = "darkgray", size = 12,  hjust = 0)
+  ) +
+  scale_fill_manual(values = c("Fall (2015-2019)" = "#e799df", "Peak (2010-2014)" = "#e388da", "Rise (2006-2009)" = "#df77d5"))
+
+```
+
+```{r graph 3 misleading, message=FALSE, warning=FALSE}
+filtered_data <- df %>%
+  filter(buyer_name %in% era_distribution_top5$buyer_name) %>%
+  group_by(buyer_name) %>%
+  summarise(average_dosage_unit = sum(dosage_unit, na.rm = TRUE)) %>%
+  arrange(desc(average_dosage_unit)) 
+
+
+ggplot(filtered_data, aes(x = average_dosage_unit/100000, y = reorder(buyer_name, average_dosage_unit) )) +
+  geom_bar(stat = "identity", fill = "#6c04a4") +
+  labs(title = "Dosage Unit for Selected Distributors",
+       subtitle = "Comparison among top distributors with highest distribution",
+       x ="Dosage Unit in 100,000",
+       y = "Distributor", 
+       caption = "For New Mexico data") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", family = "Arial", color = "black", size = 16, hjust = 0),
+    plot.subtitle = element_text(color = "darkgray", size = 11, hjust = 0),
+    axis.text.y = element_text(hjust = 0),  # Align y-axis labels with the left edge
+    plot.caption = element_text(face = "bold", color = "darkgray", size = 12,  hjust = 0)
+  )
+
+
+
+```
+
+

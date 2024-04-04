@@ -1,0 +1,160 @@
+---
+title: "Tidying data"
+date: "2024-02-20"
+output: pdf_document
+---
+
+```{r load-libs, message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+```{r question-1}
+#install.packages("nycflights13")
+library(nycflights13)
+flights %>%
+  unite("date", month, day, year, sep="-")
+```
+
+```{r Loading CSV}
+shootings <- read_csv("data/Mother Jones - Mass Shootings Database, 1982 - 2023 - Sheet1.csv")
+
+shootings_Copy <- shootings
+shootings_Copy <- as.data.frame(shootings_Copy)
+
+```
+```{r}
+shootings_Copy <- separate(shootings_Copy, 
+                           col = "location...2", 
+                           into = c("city", "state"), 
+                           sep = ",\\s*", 
+                           remove = FALSE)
+```
+
+```{r}
+shootings_Copy <- shootings_Copy %>%
+  mutate(
+    `date` = as.Date(`date`, format = "%m/%d/%y"),
+    
+    # Create new variables based on 'Created Date' after conversion
+    month = month(`date`),
+    month_name = month(`date`, label = TRUE, abbr = FALSE),
+    day = day(`date`),
+    day_name = wday(`date`, label = TRUE, abbr = FALSE),
+    weekday = wday(`date`),
+    name_weekday = weekdays(`date`)
+  )
+```
+
+```{r}
+shootings_Copy <- shootings_Copy[c("case","city", "state", "day", "day_name", "weekday", "name_weekday", "month", "month_name", "year", "fatalities", "injured", "total_victims", "location...8", "age_of_shooter", "race", "gender", "prior_signs_mental_health")]
+```
+
+```{r}
+unique(shootings_Copy$race)
+```
+```{r}
+shootings_Copy <- shootings_Copy %>%
+  mutate(cleaned_gender = case_when(
+    gender == "M" ~ "Male",
+    gender == "F" ~ "Female",
+    grepl("F (\"identifies as transgender\" and \"Audrey Hale is a biological woman who, on a social media profile, used male pronouns,” according to Nashville Metro PD officials)", gender, fixed = TRUE) ~ "Female Transgender",
+    TRUE ~ gender  # Keep the original value if none of the conditions are met
+  ))
+```
+
+```{r}
+fatalities_year <- shootings_Copy %>%
+  group_by(year) %>%
+  summarise(total_fatalities = sum(fatalities, na.rm = TRUE)) 
+
+
+ggplot(fatalities_year, aes(x = year, y = total_fatalities,)) +
+  geom_line() +
+  labs(title = "Fatalities Over the Years",
+       x = "Year",
+       y = "Total Fatalities") +
+  theme_minimal()
+```
+
+```{r}
+# Assuming mass_df is your original data frame
+mass_df_filtered <- shootings_Copy %>% filter(!is.na(age_of_shooter))
+
+# Then use your ggplot code with mass_df_filtered
+ggplot(mass_df_filtered, aes(x = cleaned_gender, y = as.numeric(age_of_shooter), color = cleaned_gender)) +
+  geom_boxplot(alpha = 0.5) +  
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  scale_fill_viridis_d() +
+  coord_flip() +
+  labs(title = "Distribution of Age by Gender",
+       x = "Gender",
+       y = "Age",
+       caption = "Source: Mother Jones") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.title = element_text(face = "bold"),
+        strip.text = element_text(face = "bold"),
+        strip.clip = "off",
+        axis.text.x = element_text(size = rel(0.8)),
+        axis.text.y = element_text(size = rel(0.8)))
+```
+
+
+```{r}
+fatalities_year <- shootings_Copy %>%
+  group_by(cleaned_gender, race) %>%
+  summarise(total_fatalities = sum(fatalities, na.rm = TRUE))
+
+# Create a bar plot for the total fatalities by gender and year
+ggplot(fatalities_year, aes(x = cleaned_gender, y = total_fatalities)) +
+  geom_col(position = "dodge") +
+  labs(title = "Fatalities per Shooter Gender",
+       x = "Gender",
+       y = "Total Fatalities",
+       fill = "Year") +
+  theme_minimal()
+```
+```{r}
+fatalities_year <- shootings_Copy %>%
+  group_by(cleaned_gender, race) %>%
+  summarise(total_fatalities = sum(fatalities, na.rm = TRUE))
+
+# Create a bar plot for the total fatalities by gender and year
+ggplot(fatalities_year, aes(x = race, y = total_fatalities)) +
+  geom_col(position = "dodge") +
+  labs(title = "Fatalities",
+       x = "Race",
+       y = "Total Fatalities",
+       fill = "Year") +
+  theme_minimal()
+```
+```{r}
+fatalities_year <- shootings_Copy %>%
+  group_by(month) %>%
+  summarise(total_fatalities = sum(fatalities, na.rm = TRUE)) 
+
+
+ggplot(fatalities_year, aes(x = month, y = total_fatalities,)) +
+  geom_line() +
+  labs(title = "Fatalities Over Month",
+       x = "Month",
+       y = "Total Fatalities") +
+  theme_minimal()
+```
+
+```{r}
+fatalities_year <- shootings_Copy %>%
+  group_by(prior_signs_mental_health_issues) %>%
+  summarise(total_fatalities = sum(fatalities, na.rm = TRUE))
+
+# Create a bar plot for the total fatalities by gender and year
+ggplot(fatalities_year, aes(x =prior_signs_mental_health_issues, y = total_fatalities)) +
+  geom_col(position = "dodge") +
+  labs(title = "Fatalities and Mental Health",
+       x = "Prior Mental Illness",
+       y = "Total Fatalities",
+       fill = "Year") +
+  theme_minimal()
+
+```
+
